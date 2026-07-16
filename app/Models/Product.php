@@ -5,10 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Laravel\Scout\Searchable; // ایمپورت تریت
 
 class Product extends Model
 {
-    use HasFactory, SoftDeletes;
+    // اضافه کردن Searchable به لیست تریت‌های داخل کلاس (اینجا بود که جا افتاده بود)
+    use HasFactory, SoftDeletes, Searchable;
 
     protected $keyType = 'string';
     public $incrementing = false;
@@ -88,5 +90,32 @@ class Product extends Model
                 }
             }
         });
+    }
+
+    /**
+     * نام ایندکس در الاستیک‌سرچ
+     */
+    public function searchableAs(): string
+    {
+        return 'products_index';
+    }
+
+    /**
+     * تعیین فیلدهایی که به الاستیک‌سرچ ارسال می‌شوند.
+     */
+        public function toSearchableArray(): array
+    {
+        return [
+            'id'          => (string) $this->id,
+            'name'        => (string) $this->name,
+            'slug'        => (string) $this->slug,
+            'description' => (string) $this->description,
+            'price'       => (float) $this->price,
+            'stock'       => (int) $this->stock,
+            'category_id' => (string) $this->category_id,
+            
+            // تغییر مهم: ارسال به صورت عدد صحیح (Timestamp) برای مرتب‌سازی بهینه در الاستیک
+            'created_at'  => $this->created_at?->timestamp, 
+        ];
     }
 }
