@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Comment extends Model
 {
@@ -14,6 +15,7 @@ class Comment extends Model
     public $incrementing = false;
 
     protected $fillable = [
+        'id',
         'user_id',
         'product_id',
         'parent_id',
@@ -64,6 +66,10 @@ class Comment extends Model
         });
     }
 
+    /**
+     * به‌روزرسانی آمار محصول (تعداد کامنت، تعداد امتیاز، میانگین امتیاز)
+     * با استفاده از تراکنش و قفل برای جلوگیری از Race Condition
+     */
     private function updateProductCounts()
     {
         $product = $this->product;
@@ -71,15 +77,26 @@ class Comment extends Model
             return;
         }
 
-        $comments = $product->comments()->where('is_approved', true)->get();
-        $totalComments = $comments->count();
-        $totalRatings = $comments->whereNotNull('rate')->count();
-        $sumRates = $comments->whereNotNull('rate')->sum('rate');
+        // استفاده از تراکنش و قفل برای به‌روزرسانی اتمیک
+        DB::transaction(function () use ($product) {
+            // قفل کردن رکورد محصول برای به‌روزرسانی
+            $product = Product::where('id', $product->id)->lockForUpdate()->first();
+            if (!$product) {
+                return;
+            }
 
-        $product->comments_count = $totalComments;
-        $product->ratings_count = $totalRatings;
-        $product->average_rating = $totalRatings > 0 ? round($sumRates / $totalRatings, 2) : 0;
+            // محاسبه آمار از کامنت‌های تایید شده
+            $comments = $product->comments()->where('is_approved', true)->get();
+            $totalComments = $comments->count();
+            $totalRatings = $comments->whereNotNull('rate')->count();
+            $sumRates = $comments->whereNotNull('rate')->sum('rate');
 
-        $product->saveQuietly();
+            $product->comments_count = $totalComments;
+            $product->ratings_count = $totalRatings;
+            $product->average_rating = $totalRatings > 0 ? round($sumRates / $totalRatings, 2) : 0;
+
+            // ذخیره بدون فراخوانی event ها (برای جلوگیری از حلقه)
+            $product->saveQuietly();
+        });
     }
 }
