@@ -5,41 +5,88 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Model\Comment;
-use App\Model\CartItem;
-use App\Model\Category;
+
 class Product extends Model
 {
-     use HasFactory, SoftDeletes;
-     protected $keyType = 'string';
-     public $incrementing = false;
+    use HasFactory, SoftDeletes;
 
+    protected $keyType = 'string';
+    public $incrementing = false;
 
-      protected $fillable = [
+    protected $fillable = [
+        'id',
         'category_id',
         'name',
         'slug',
         'description',
         'price',
-        'stock'
+        'stock',
+        'comments_count',
+        'ratings_count',
+        'average_rating',
     ];
 
+    protected $casts = [
+        'price' => 'decimal:3',
+        'stock' => 'integer',
+        'comments_count' => 'integer',
+        'ratings_count' => 'integer',
+        'average_rating' => 'decimal:2',
+    ];
 
-    // Mnay To One
     public function category()
     {
         return $this->belongsTo(Category::class);
     }
 
-    // One To Many
     public function comments()
     {
         return $this->hasMany(Comment::class)->whereNull('parent_id');
     }
 
-    // One to Many
     public function cartItems()
     {
         return $this->hasMany(CartItem::class);
+    }
+
+    protected static function booted()
+    {
+        static::created(function ($product) {
+            if ($product->category_id) {
+                $category = Category::find($product->category_id);
+                if ($category) {
+                    $category->increment('product_count');
+                }
+            }
+        });
+
+        static::updated(function ($product) {
+            $originalCategoryId = $product->getOriginal('category_id');
+            $newCategoryId = $product->category_id;
+
+            if ($originalCategoryId !== $newCategoryId) {
+                if ($originalCategoryId) {
+                    $oldCategory = Category::find($originalCategoryId);
+                    if ($oldCategory) {
+                        $oldCategory->decrement('product_count');
+                    }
+                }
+                if ($newCategoryId) {
+                    $newCategory = Category::find($newCategoryId);
+                    if ($newCategory) {
+                        $newCategory->increment('product_count');
+                    }
+                }
+            }
+        });
+
+        static::deleted(function ($product) {
+            if ($product->category_id) {
+                $category = Category::find($product->category_id);
+                if ($category) {
+                    $category->decrement('product_count');
+                }
+            }
+        });
     }
 }
