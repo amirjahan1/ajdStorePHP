@@ -114,21 +114,24 @@ class CartController extends Controller
         return new CartItemResource($cartItem);
     }
 
-    /**
+   
+        /**
      * Remove item from cart.
      *
      * @summary حذف آیتم از سبد خرید
      */
     public function destroy(CartItem $cartItem)
     {
+        // اطمینان از اینکه آیتم متعلق به کاربر جاری است
         if ($cartItem->user_id !== Auth::user()->uuid) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        DB::transaction(function () use ($cartItem) {
-            $cartItem->delete();
-        });
+        // به جای حذف مستقیم، جاب را به صف ارسال می‌کنیم
+        // این کار باعث می‌شود ایمیل ارسال شود و سپس حذف انجام گیرد
+        \App\Jobs\RemoveCartItemJob::dispatch($cartItem->id);
 
-        return response()->json(['message' => 'Item removed from cart']);
+        // پاسخ فوری به کاربر (چون حذف در پس‌زمینه انجام می‌شود)
+        return response()->json(['message' => 'آیتم در صف حذف قرار گرفت و به زودی از سبد خرید شما خارج می‌شود.']);
     }
 }
